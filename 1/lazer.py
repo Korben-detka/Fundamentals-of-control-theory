@@ -41,7 +41,7 @@ class App(ctk.CTk):
         labels_and_defaults = [
             ("Диаметр лазера (мм):", "5"),
             ("Толщина бруска (мм):", "10"),
-            ("Мощность Лазера (Вт):", "500"),
+            ("Мощность Лазера (Вт):", "200"),
             ("Плотность бруска (кг/м^3):", "7850")
         ]
 
@@ -179,8 +179,35 @@ class App(ctk.CTk):
         self.depth_label.configure(text=f"Максимальная глубина прожега: {self.depth:.4f} м",wraplength=220)
 
     def update_bar_height(self):
+        # Получаем текущую ширину холста для вычисления центра
+        canvas_width = canvas.winfo_width()
+
+        # Вычисляем новые координаты для высоты bar в зависимости от значения self.depth и self.L
         new_height = 350 - (300 * (self.depth / self.L))  # 300 — начальная высота бруска
-        canvas.coords(bar, bar_x, 50, bar_x + 100, new_height)
+
+        # Обновляем координаты bar, чтобы он оставался центрированным по горизонтали
+        bar_width = 100
+        bar_x = (canvas_width - bar_width) / 2  # Пересчитываем положение по центру
+        canvas.coords(bar, bar_x, 50, bar_x + bar_width, new_height)
+
+    def update_bar_height(self):
+        # Получаем текущую ширину и высоту холста для вычисления центра
+        canvas_width = canvas.winfo_width()
+        canvas_height = canvas.winfo_height()
+
+        high_otstup = round(canvas_height * 0.05)  # Верхний отступ
+        bar_width = round(canvas_width * 0.8)      # Ширина бруска
+        bar_high = round(canvas_height * 0.8)      # Начальная высота бруска
+
+        # Вычисляем новую высоту бруска в зависимости от значения self.depth и self.L
+        new_height = bar_high * (self.depth / self.L)  # Новый расчет высоты
+
+        # Обновляем координаты bar, чтобы он оставался центрированным по горизонтали
+        bar_x = (canvas_width - bar_width) / 2
+        canvas.coords(bar, bar_x, high_otstup, bar_x + bar_width, bar_high + high_otstup - new_height)
+
+
+
 
     def on_close(self):
         print("Окно закрывается, завершаем программу.")
@@ -191,28 +218,47 @@ class App(ctk.CTk):
         self.graph_frame.savefig("graph.png")
 
     def create_graphics(self):
+
         def move_laser(event):
             if event.keysym in ('Left', 'a'):
                 canvas.move(laser, -1, 0)  # Движение лазера влево
             elif event.keysym in ('Right', 'd'):
                 canvas.move(laser, 1, 0)   # Движение лазера вправо
 
-        global canvas, bar, bar_x
+        global canvas, bar, laser
         height_C = 400
+        width_C = 400
 
-        canvas = ctk.CTkCanvas(self.graph_frame, width=400, height=height_C, bg="white")
+        canvas = ctk.CTkCanvas(self.graph_frame, width=width_C, height=height_C, bg="white")
         canvas.pack(fill="both", expand=True)
 
-        bar_x = (400 - 100) / 2
-        bar = canvas.create_rectangle(bar_x, 50, bar_x + 100, 350, fill="#7b7b7b")
+        def update_positions(event=None):
+            canvas_width  = canvas.winfo_width()
+            canvas_height = canvas.winfo_height()
 
-        laser = canvas.create_rectangle(190, 380, 210, 400, fill="red")
+            high_otstup = round(canvas_height * 0.05)
+            laser_size = round(canvas_width * 0.05)
+            bar_width = round(canvas_width * 0.8)
+            bar_high  = round(canvas_height * 0.8)
 
-        # Привязываем события клавиш к функции перемещения лазера для всего окна
+            bar_x = (canvas_width - bar_width) / 2
+            canvas.coords(bar, bar_x, high_otstup, bar_x + bar_width, bar_high + high_otstup)
+
+            laser_x = (canvas_width - laser_size) / 2
+            canvas.coords(laser, laser_x, bar_high + high_otstup, laser_x + laser_size, bar_high + high_otstup + laser_size)
+
+        bar = canvas.create_rectangle(0, 0, 0, 0, fill="#7b7b7b")
+        laser = canvas.create_rectangle(0, 0, 0, 0, fill="red")
+
+        canvas.bind("<Configure>", update_positions)
+
         self.bind('<Left>', move_laser)
         self.bind('<Right>', move_laser)
         self.bind('a', move_laser)
         self.bind('d', move_laser)
+
+        update_positions()
+
 
 
 
