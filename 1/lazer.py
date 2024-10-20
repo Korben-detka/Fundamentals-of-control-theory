@@ -1,37 +1,42 @@
-import tkinter as tk
-from tkinter import messagebox
-from tkinter import *
+import customtkinter as ctk
 import numpy as np
 import time
+import os
 
-# Глобальные переменные для таймера
-start_time   = 0
-elapsed_time = 0
-running      = False
-reset        = False
-depth        = 0
+d_t = 10 # m seconds
 
-class App(tk.Tk):
+class App(ctk.CTk):
+
     def __init__(self):
         super().__init__()
+        self.depth = 0
+        self.error = False
+        self.start_time   = 0
+        self.elapsed_time = 0
+        self.running      = False
+        self.reset        = False
+        self.entry_fields = []
+        self.L = 0
+        self.t = d_t
+        self.t_ms = self.t / 1000
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)  # Обработка события закрытия окна
         self.title("Визуализация графиков")
         self.state("zoomed")
         self.resizable(True,True)
 
-        self.main_frame = Frame(master=self)
-        self.main_frame.pack(fill=BOTH, expand=True)
+        self.main_frame = ctk.CTkFrame(master=self)
+        self.main_frame.pack(fill="both", expand=True)
 
-        self.graph_frame = Frame(master=self.main_frame,relief=SUNKEN, borderwidth=5)
-        self.graph_frame.pack(side=LEFT, fill=BOTH, expand=True)
+        self.graph_frame = ctk.CTkFrame(master=self.main_frame, border_width=5)
+        self.graph_frame.pack(side="left", fill="both", expand=True)
 
-        self.controls_frame = Frame(self.main_frame,width=250)
-        self.controls_frame.pack(side=RIGHT, fill=Y)
+        self.controls_frame = ctk.CTkFrame(self.main_frame, width=300)
+        self.controls_frame.pack(side="right", fill="y",expand=False)
         self.controls_frame.pack_propagate(False)
 
-        self.button_frame = Frame(self.controls_frame)
-        self.button_frame.pack(pady=10)
+        self.button_frame = ctk.CTkFrame(self.controls_frame)
+        self.button_frame.pack(pady=3,fill="x",padx = 30)
 
         labels_and_defaults = [
             ("Диаметр лазера (мм):", "5"),
@@ -40,107 +45,142 @@ class App(tk.Tk):
             ("Плотность бруска (кг/м^3):", "7850")
         ]
 
-        entry_fields = []
         for label_text, default_value in labels_and_defaults:
-            self.label = Label(self.button_frame, text=label_text)
-            self.label.pack(anchor='w', pady=(10, 0))  # Добавляем отступ сверху для разделения от предыдущих элементов
-            self.entry = Entry(self.button_frame)
+            self.label = ctk.CTkLabel(self.button_frame, text=label_text)
+            self.label.pack(anchor='w', pady=(5, 0),padx=25)  # Добавляем отступ сверху для разделения от предыдущих элементов
+            self.entry = ctk.CTkEntry(self.button_frame)
             self.entry.insert(0, default_value)  # Устанавливаем дефолтное значение в поле ввода
-            self.entry.pack(fill=X, pady=(0, 5))  # Добавляем отступ снизу между полями ввода
-            entry_fields.append(self.entry)
+            self.entry.pack(fill="x", padx = 20)  # Добавляем отступ снизу между полями ввода
+            self.entry_fields.append(self.entry)
 
+        self.button_start_lazer = ctk.CTkButton(self.button_frame, text="Start",corner_radius=20,command=self.start_lazer)
+        self.button_start_lazer.pack(pady=(20,10))
 
-        self.button_start_time= Button(self.button_frame, text="start", command=lambda: self.start_timer(entry_fields))
-        self.button_start_time.pack(fill=X, pady=5)
+        self.button_stop_lazer = ctk.CTkButton(self.button_frame, text="Stop",corner_radius=20, command=self.stop_timer)
+        self.button_stop_lazer.pack(pady=10)
 
-        self.button_stop_time = Button(self.button_frame, text="stop", command=self.stop_timer)
-        self.button_stop_time.pack(fill=X, pady=5)
-
-        self.button_reset = Button(self.button_frame, text="reset", command=lambda: self.reset_timer(entry_fields))
-        self.button_reset.pack(fill=X,pady=5)
+        self.button_reset = ctk.CTkButton(self.button_frame, text="Reset",corner_radius=20, command=self.reset_timer)
+        self.button_reset.pack(pady=10)
 
         # Метка для отображения времени работы
-        self.time_label = Label(self.button_frame, text="Время работы: 0.00 мс")
+        self.time_label = ctk.CTkLabel(self.button_frame, text="Время работы: 0.00 мс")
         self.time_label.pack(pady=10)
 
-        self.depth_label = Label(self.button_frame, text="Depth:")
+        self.depth_label = ctk.CTkLabel(self.button_frame, text="Глубина:")
         self.depth_label.pack(pady=10)
-        self.result_label = Label(self.button_frame, text="Металл обрабатывается")
-        self.result_label.pack(pady=10)
 
-    def update_timer(self,entry_fields):
-        if reset:
-            current_time = 0
-            self.time_label.config(text=f"Время работы: {current_time * 1000:.2f} мс")  # Обновляем таймер в мс
-            self.calculate_depth(entry_fields,0)  # Обновляем расчет глубины при каждом тике
-        if running:
-            current_time = time.perf_counter() - start_time
-            self.time_label.config(text=f"Время работы: {current_time * 1000:.2f} мс")  # Обновляем таймер в мс
-            self.calculate_depth(entry_fields,0.001)  # Обновляем расчет глубины при каждом тике
-            self.time_label.after(10, lambda: self.update_timer(entry_fields))  # Передаем entry_fields при каждом обновлении
+        self.result_label = ctk.CTkLabel(self.button_frame, text="Металл готов к обработке",width=200)
+        self.result_label.pack(pady=10,expand=False,fill=None)
 
-    def start_timer(self, entry_fields):
-        global start_time, running
-        if not running:
-            start_time = time.perf_counter() - elapsed_time  # Запускаем или возобновляем таймер
-            running = True
-            self.update_timer(entry_fields)
+        try:
+            self.L = float(self.entry_fields[1].get()) / 1000  # Конвертируем толщину в метры
+        except ValueError:
+            print("Enter correct value of L")
+            return
+
+    def err(self):
+        self.error = True
+
+    def start_lazer(self):
+        self.error = False
+        self.validate_inputs()
+        if not self.error:
+            self.entry_fields[1].configure(state="readonly")
+            self.start_timer()
+            self.update_values()
+
+    def validate_inputs(self):
+        try:
+            # Преобразуем все данные перед выполнением операций
+            a0 = float(self.entry_fields[0].get())
+            a1 = float(self.entry_fields[1].get()) / 1000  # Конвертируем толщину в метры
+            float(self.entry_fields[2].get())
+            a3 = float(self.entry_fields[3].get())
+            if a0 == 0:
+                self.error = True
+                print("Диаметр лазера не может быть 0")
+            if a1 == 0:
+                self.error = True
+                print("Толщина бруска не может быть 0")
+            if a3 == 0:
+                self.error = True
+                print("Плотность бруска не может быть 0")
+            return True  # Ввод валиден
+        except ValueError:
+            self.err()
+            print("Ошибка ввода данных. Пожалуйста, проверьте вводимые значения.")
+            return False  # Ввод не валиден
+
+    def start_timer(self):
+        if not self.running:
+            print("Timer in on")
+            self.running = True
+            self.start_time = time.perf_counter() - self.elapsed_time  # Запускаем или возобновляем таймер
+
+    def update_values(self):
+        self.update_timer()
+        self.calculate_depth()
+        self.update_bar_height()
+        if self.running:
+            self.after(self.t,self.update_values)
+
+    def update_timer(self):
+        if self.reset:
+            self.time_label.configure(text=f"Время работы: {0:.2f} мс")  # Обновляем таймер в мс
+        if self.running:
+            current_time = time.perf_counter() - self.start_time
+            self.time_label.configure(text=f"Время работы: {current_time * 1000:.2f} мс")  # Обновляем таймер в мс
 
     def stop_timer(self):
-        global elapsed_time, running
-        if running:
-            elapsed_time = time.perf_counter() - start_time  # Сохраняем текущее время
-            running = False
+        if self.running:
+            print("Timer in off")
+            self.elapsed_time = time.perf_counter() - self.start_time  # Сохраняем текущее время
+            self.running = False
 
-    def reset_timer(self, entry_fields):
-        global start_time, elapsed_time, running,depth,reset
-        depth = 0
-        reset = 1
-        start_time = 0
-        elapsed_time = 0
-        running = False
-        self.update_timer(entry_fields)
-        reset = 0
+    def reset_timer(self):
+        self.reset = 1
 
+        self.running = False
+        self.depth = 0
+        self.start_time = 0
+        self.elapsed_time = 0
 
-    def calculate_depth(self, entry_fields,elapsed_time):
-        # Получаем данные от пользователя
-        global depth,reset
+        saved_t = self.t_ms
+        self.t_ms = 0
+        self.update_values()
+        self.t_ms = saved_t
+
+        self.reset = 0
+        self.entry_fields[1].configure(state="normal")
+        print("Reset is Done")
+
+    def calculate_depth(self):
         try:
-            D = float(entry_fields[0].get()) / 1000  # Конвертируем диаметр в метры
-            L = float(entry_fields[1].get()) / 1000  # Конвертируем толщину в метры
-            W = float(entry_fields[2].get())  # Мощность лазера в ваттах
-            rho = float(entry_fields[3].get())  # Плотность материала в кг/м^3
+            D = float(self.entry_fields[0].get()) / 1000  # Конвертируем диаметр в метры
+            W = float(self.entry_fields[2].get())  # Мощность лазера в ваттах
+            rho = float(self.entry_fields[3].get())  # Плотность материала в кг/м^3
         except ValueError:
-            self.stop_timer()  # Вызываем функцию stop_timer() при ошибке
+            self.stop_timer()  # Останавливаем таймер при ошибке
             return
-        # Далее идёт логика работы с корректными значениями
-        # Например:
-        # process_calculation(D, L, W, rho)
+
         h = 1000000  # Константа для расчета
 
         # Расчет площади поперечного сечения
         S = np.pi * (D / 2) ** 2
-        # Рассчитываем глубину, до которой металл будет испарен
-        d_depth = (W * elapsed_time) / (h * S * rho)
-        depth = depth + d_depth
-        if reset:
-            self.result_label.config(text="Металл обрабатывается")
-        elif depth >= L:
-            depth = L
-            self.result_label.config(text=f"Металл полностью испарился. Глубина: {depth:.4f} метров")
-        self.depth_label.config(text=f"Глубина прожига: {depth:.4f} м")  # Обновляем таймер в мс
-        self.update_bar_height(depth, L)
+        # Рассчитываем глубину
+        d_depth = (W * self.t_ms) / (h * S * rho)
+        self.depth = self.depth + d_depth
 
-    def update_bar_height(self, depth, L):
-        # Рассчитываем, насколько высота бруска должна уменьшиться
-        if L != 0:
-            new_height = 350 - (300 * (depth / L))  # 300 — начальная высота бруска
-            canvas.coords(bar, bar_x, 50, bar_x + 100, new_height)
-        else:
-            self.stop_timer()
-        # Нижняя граница бруска поднимается, верхняя граница остается на месте (на уровне 50 пикселей)
+        if self.reset:
+            self.result_label.configure(text="Металл обрабатывается")
+        elif self.depth >= self.L:
+            self.depth = self.L
+            self.result_label.configure(text=f"Металл частично/полностью испарился. Глубина: {self.depth:.4f} метров",wraplength=220)
+        self.depth_label.configure(text=f"Максимальная глубина прожега: {self.depth:.4f} м",wraplength=220)
 
+    def update_bar_height(self):
+        new_height = 350 - (300 * (self.depth / self.L))  # 300 — начальная высота бруска
+        canvas.coords(bar, bar_x, 50, bar_x + 100, new_height)
 
     def on_close(self):
         print("Окно закрывается, завершаем программу.")
@@ -150,39 +190,37 @@ class App(tk.Tk):
     def save_graph(self):
         self.graph_frame.savefig("graph.png")
 
-    def create_graphics(self, graph_frame):
+    def create_graphics(self):
         def move_laser(event):
             if event.keysym in ('Left', 'a'):
                 canvas.move(laser, -1, 0)  # Движение лазера влево
             elif event.keysym in ('Right', 'd'):
                 canvas.move(laser, 1, 0)   # Движение лазера вправо
 
-        # Создаем Canvas для отрисовки графических элементов внутри graph_frame
-        global canvas, bar, bar_x  # Используем глобальные переменные для бруска
+        global canvas, bar, bar_x
         height_C = 400
 
-        canvas = Canvas(self.graph_frame, width=400, height=height_C, bg="white")
-        canvas.pack(fill=BOTH, expand=True)
+        canvas = ctk.CTkCanvas(self.graph_frame, width=400, height=height_C, bg="white")
+        canvas.pack(fill="both", expand=True)
 
-        # Рисуем брусок по центру окна
-        bar_x = (400 - 100) / 2  # Начальная позиция для центра бруска
+        bar_x = (400 - 100) / 2
         bar = canvas.create_rectangle(bar_x, 50, bar_x + 100, 350, fill="#7b7b7b")
 
-        # Создаем лазер внизу окна
         laser = canvas.create_rectangle(190, 380, 210, 400, fill="red")
 
-        # Привязываем события клавиш к функции перемещения лазера
-        self.graph_frame.bind_all('<Left>', move_laser)
-        self.graph_frame.bind_all('<Right>', move_laser)
-        self.graph_frame.bind_all('a', move_laser)
-        self.graph_frame.bind_all('d', move_laser)
+        # Привязываем события клавиш к функции перемещения лазера для всего окна
+        self.bind('<Left>', move_laser)
+        self.bind('<Right>', move_laser)
+        self.bind('a', move_laser)
+        self.bind('d', move_laser)
+
+
 
 if __name__ == "__main__":
+
+    ctk.set_appearance_mode("Dark")
+    ctk.set_default_color_theme("green")
+    os.system('cls')
     main_window = App()
-    main_window.create_graphics(main_window.graph_frame)
-
-
-# Создание главного окна
-
-
-main_window.mainloop()
+    main_window.create_graphics()
+    main_window.mainloop()
