@@ -31,7 +31,7 @@ class App(ctk.CTk):
         self.graph_frame = ctk.CTkFrame(master=self.main_frame, border_width=5)
         self.graph_frame.pack(side="left", fill="both", expand=True)
 
-        self.controls_frame = ctk.CTkFrame(self.main_frame, width=300)
+        self.controls_frame = ctk.CTkFrame(master=self.main_frame, width=300)
         self.controls_frame.pack(side="right", fill="y",expand=False)
         self.controls_frame.pack_propagate(False)
 
@@ -237,7 +237,7 @@ class App(ctk.CTk):
             canvas_height = canvas.winfo_height()
 
             high_otstup = round(canvas_height * 0.05)
-            laser_size = round(canvas_width * 0.05)
+            laser_size = round(canvas_width * 0.2)
             bar_width = round(canvas_width * 0.8)
             bar_high  = round(canvas_height * 0.8)
 
@@ -269,4 +269,5 @@ if __name__ == "__main__":
     os.system('cls')
     main_window = App()
     main_window.create_graphics()
+    main_window.state("zoomed")
     main_window.mainloop()
